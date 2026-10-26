@@ -1,0 +1,14 @@
+[project]
+name = "policy-qa"
+version = "0.1.0"
+description = "企业制度问答 Agent：把制度文档变成能问答、且每条答案都带条款出处的服务"
+authors = [
+    { name = "Xiong Nanjun", email = "973783076@qq.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "openai>=1.54",
+    "python-dotenv>=1.0",
+]
