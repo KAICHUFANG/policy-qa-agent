@@ -30,10 +30,16 @@ MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
 CORPUS_DIR = ROOT / "corpus"
 
 # ---- 检索开关 ----
-# M1（第 1 阶段）先把全部条款塞进提示词，用来跑通最短链路；
-# M2 接入向量检索后改成 "rag"，两条路用同一套评测集对比。
-RETRIEVAL_MODE = os.getenv("RETRIEVAL_MODE", "full").strip()   # full | rag
+# full   全量投喂（基线，准确率天花板 / 成本也最高）
+# bm25   关键词检索（纯代码，零下载）
+# vector 向量检索（Chroma + bge-small-zh）
+RETRIEVAL_MODE = os.getenv("RETRIEVAL_MODE", "full").strip()   # full | bm25 | vector
 TOP_K = int(os.getenv("TOP_K", "8"))
+
+# ---- 向量检索 ----
+CHROMA_DIR = ROOT / ".chroma"                      # 向量库持久化目录（不进仓库）
+EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-small-zh-v1.5")
+EMBED_CACHE = ROOT / ".models"                     # 模型权重缓存（不进仓库）
 
 
 def check() -> None:

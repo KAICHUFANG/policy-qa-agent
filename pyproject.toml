@@ -11,4 +11,6 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "openai>=1.54",
     "python-dotenv>=1.0",
+    "chromadb>=1.5.9",
+    "fastembed>=0.9.1",
 ]

@@ -16,3 +16,8 @@ wheels/
 
 # ---- 运行产物 ----
 *.log
+
+# ---- 检索层产物（可重新生成）----
+.chroma/
+.models/
+eval/report.json

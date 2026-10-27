@@ -19,22 +19,33 @@ from pydantic import BaseModel, Field
 import config
 from app import corpus as corpus_mod
 from app import llm, prompts
+from app.retrieval import Retriever
 
 app = FastAPI(title="制度问答 Agent", version="0.1.0")
 
 # 启动时加载一次：制度文档是「读多写少」的数据，每次请求都去读盘是浪费。
 # 以后要支持上传新制度，就在这里留一个 reload 的入口（M3 做）。
 _CLAUSES = corpus_mod.load_clauses()
+_RETRIEVER = Retriever(_CLAUSES)
 # 出处校验表：(文档名, 条款号) → 条款对象
 _INDEX = {(c.doc, c.number): c for c in _CLAUSES}
 
-# 答案里的引用形如《差旅与费用报销制度》第5条
-_CITE_RE = re.compile(r"《([^》]+)》\s*(第\d+条)")
+# 答案里的引用有两种常见写法，必须都认：
+#   ① 分开写：《员工手册》第13条；《员工手册》第15条
+#   ② 合并写：《差旅与费用报销制度》第4条、第5条   ← 模型很爱这么写
+# 旧版只认 ①，结果把合法的第二、三个条号当成「没引用」丢掉，
+# 评测里表现为「明明答对了却判没命中条款」。
+# 教训：测试报错时先怀疑自己的工具，不要一上来就改业务逻辑。
+_CITE_RE = re.compile(r"《([^》]+)》\s*((?:第\d+条[、,，和与及\s]*)+)")
+_NUM_RE = re.compile(r"第(\d+)条")
 
 
 class AskIn(BaseModel):
     question: str = Field(..., min_length=1, max_length=500,
                           description="员工的问题，例：出差去上海住宿能报多少")
+    # 不传就用 config.RETRIEVAL_MODE。显式传是为了能「同一个进程里跑三种检索对比」。
+    mode: str | None = Field(None, description="full / bm25 / vector，不传用默认")
+    top_k: int | None = Field(None, ge=1, le=58, description="检索取几条条款")
 
 
 class Citation(BaseModel):
@@ -53,15 +64,17 @@ def verify_citations(answer: str) -> List[Citation]:
         这里是确定性的字符串比对，不依赖模型的自觉性。
     """
     seen, out = set(), []
-    for doc, number in _CITE_RE.findall(answer):
-        key = (doc.strip(), number.strip())
-        if key in seen:
-            continue
-        seen.add(key)
-        clause = _INDEX.get(key)
-        out.append(Citation(doc=key[0], number=key[1],
-                           heading=clause.heading if clause else "",
-                           valid=clause is not None))
+    for doc, chain in _CITE_RE.findall(answer):
+        for num in _NUM_RE.findall(chain):
+            number = f"第{num}条"
+            key = (doc.strip(), number)
+            if key in seen:
+                continue
+            seen.add(key)
+            clause = _INDEX.get(key)
+            out.append(Citation(doc=key[0], number=key[1],
+                                heading=clause.heading if clause else "",
+                                valid=clause is not None))
     return out
 
 
@@ -88,8 +101,8 @@ def corpus_info() -> Dict[str, Any]:
 def ask(body: AskIn) -> Dict[str, Any]:
     question = body.question.strip()
 
-    # ---- M1：全量投喂。所有条款都给它，靠提示词约束它只用这些 ----
-    used = _CLAUSES
+    # ---- 按模式取条款（full / bm25 / vector）----
+    used = _RETRIEVER.search(question, mode=body.mode, k=body.top_k)
     clauses_text = _clauses_text(used)
 
     result = llm.chat(system=prompts.SYSTEM,
@@ -106,9 +119,10 @@ def ask(body: AskIn) -> Dict[str, Any]:
         "invalid_citations": [c.dict() for c in citations if not c.valid],
         "refused": refused,          # 模型有没有老实说「制度里没写」
         "retrieval": {
-            "mode": "full",
+            "mode": (body.mode or config.RETRIEVAL_MODE).lower(),
             "clauses_used": len(used),
             "chars_used": len(clauses_text),
+            "cites": [c.cite for c in used],       # 检索到了哪些条款（排障用）
         },
         "usage": result["usage"],
         "latency_ms": result["latency_ms"],
