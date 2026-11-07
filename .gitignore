@@ -21,3 +21,7 @@ wheels/
 .chroma/
 .models/
 eval/report.json
+
+# ---- 编辑器 / 临时文件 ----
+.idea/
+*.bak

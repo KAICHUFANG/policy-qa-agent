@@ -41,6 +41,8 @@ CHROMA_DIR = ROOT / ".chroma"                      # 向量库持久化目录（
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-small-zh-v1.5")
 EMBED_CACHE = ROOT / ".models"                     # 模型权重缓存（不进仓库）
 
+# ---- 回复上限 ----
+MAX_CLAUSES_CHARS = int(os.getenv("MAX_CLAUSES_CHARS", "7000"))
 
 def check() -> None:
     """启动自检：缺东西立刻报清楚，别等调用 API 时才炸。"""
