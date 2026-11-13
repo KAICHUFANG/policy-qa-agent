@@ -11,7 +11,7 @@ M1 的检索是「全量投喂」：把所有条款拼进提示词。制度文�
 """
 
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -108,7 +108,7 @@ class AskIn(BaseModel):
     question: str = Field(..., min_length=1, max_length=500,
                           description="员工的问题，例：出差去上海住宿能报多少")
     # 不传就用 config.RETRIEVAL_MODE。显式传是为了能「同一个进程里跑三种检索对比」。
-    mode: str | None = Field(None, description="full / bm25 / vector，不传用默认")
+    mode: Literal["full","bm25","vector","hybrid"] | None = Field(None, description="full / bm25 / vector / hybrid，不传用默认")
     top_k: int | None = Field(None, ge=1, le=58, description="检索取几条条款")
 
 
@@ -204,3 +204,18 @@ def clause(doc:str,number:str)->dict:
     if c is None:
         raise HTTPException(status_code=404, detail="没有这份文档或这一条")
     return {"doc":c.doc,"number":c.number,"chapter":c.chapter,"heading":c.heading,"text":c.text}
+@app.get("/search")
+def search(q:str,mode:Literal["full","bm25","vector","hybrid"],k:int = config.TOP_K) -> List[Any]:
+    question = q
+    key = k
+
+    used = _RETRIEVER.search(question, mode=mode, k=key)
+    clause_text: List[Any] = []
+
+    for rank,c in enumerate(used, start=1):
+        if len(c.text)>=40:
+            clause_text.append({"rank":rank,"cite":c.cite,"text":c.text[0:39]+"..."})
+        else:
+            clause_text.append({"rank":rank,"cite":c.cite,"text":c.text[0:49]})
+
+    return clause_text

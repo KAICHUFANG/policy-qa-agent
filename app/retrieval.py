@@ -195,11 +195,11 @@ class Retriever:
     #     用名次就自动归一了，不需要调权重，也不需要归一化分数。
     # 60 是原论文里的经验常数，作用是压平头部名次之间的差距。
     def _hybrid(self, query: str, k: int) -> List[Clause]:
-        pool = max(k * 2, 10)
+        pool = max(k * 2, 10) #候选池
         lists = [self.search(query, mode="bm25", k=pool),
                  self.search(query, mode="vector", k=pool)]
-        fused: Dict[str, float] = {}
-        by_cite: Dict[str, Clause] = {}
+        fused: Dict[str, float] = {} #分值表
+        by_cite: Dict[str, Clause] = {} #本体表
         for items in lists:
             for rank, c in enumerate(items, start=1):
                 fused[c.cite] = fused.get(c.cite, 0.0) + 1.0 / (60 + rank)
